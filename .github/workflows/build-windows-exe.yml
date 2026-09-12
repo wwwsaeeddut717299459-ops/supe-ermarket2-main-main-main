@@ -1,0 +1,186 @@
+name: Build almajedPRO Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      # 1. تحميل المشروع
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. تثبيت Flutter
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # 3. التحقق من Flutter
+      - name: Check Flutter
+        run: flutter --version
+
+      # 4. تفعيل Windows Desktop
+      - name: Enable Windows
+        run: flutter config --enable-windows-desktop
+
+      # 5. تحميل dependencies
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 6. توليد ملفات Drift
+      - name: Generate Drift files
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      # 7. بناء نسخة Windows Release
+      - name: Build Windows
+        run: flutter build windows --release
+
+      # 8. التحقق من وجود التطبيق
+      - name: Verify Windows Build
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "build/windows/x64/runner/Release")) {
+            Write-Error "Windows build folder was not found."
+            exit 1
+          }
+
+          Write-Host "Windows build found successfully."
+
+      # 9. إنشاء مجلد Installer
+      - name: Prepare Installer Files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "installer" | Out-Null
+          New-Item -ItemType Directory -Force -Path "installer/app" | Out-Null
+
+          Copy-Item `
+            -Path "build/windows/x64/runner/Release/*" `
+            -Destination "installer/app" `
+            -Recurse `
+            -Force
+
+      # 10. إنشاء ملف Inno Setup (تم تعديل المسارات هنا)
+      - name: Create Inno Setup Script
+        shell: pwsh
+        run: |
+          @"
+          #define MyAppName "almajedPRO"
+          #define MyAppVersion "2.0.0"
+          #define MyAppPublisher "almajedPRO"
+          #define MyAppExeName "almajedPRO.exe"
+
+          [Setup]
+
+          AppId={{7B3D4B6E-6C8D-4E4D-9B4F-7D8A3E1C5A21}
+
+          AppName={#MyAppName}
+          AppVersion={#MyAppVersion}
+          AppPublisher={#MyAppPublisher}
+
+          DefaultDirName={autopf}\almajedPRO
+
+          DefaultGroupName={#MyAppName}
+
+          OutputDir=.
+          OutputBaseFilename=almajedPRO-Setup
+
+          Compression=lzma
+          SolidCompression=yes
+
+          WizardStyle=modern
+
+          ArchitecturesAllowed=x64
+          ArchitecturesInstallIn64BitMode=x64
+
+          DisableProgramGroupPage=yes
+
+          UninstallDisplayName={#MyAppName}
+          UninstallDisplayIcon={app}\{#MyAppExeName}
+
+          [Languages]
+          Name: "english"; MessagesFile: "compiler:Default.isl"
+
+          [Tasks]
+          Name: "desktopicon"; \
+            Description: "Create a desktop shortcut"; \
+            GroupDescription: "Additional shortcuts:"; \
+            Flags: unchecked
+
+          [Files]
+          Source: "app\*"; \
+            DestDir: "{app}"; \
+            Flags: ignoreversion recursesubdirs createallsubdirs
+
+          [Icons]
+          Name: "{group}\{#MyAppName}"; \
+            Filename: "{app}\{#MyAppExeName}"; \
+            WorkingDir: "{app}"
+
+          Name: "{autodesktop}\{#MyAppName}"; \
+            Filename: "{app}\{#MyAppExeName}"; \
+            WorkingDir: "{app}"; \
+            Tasks: desktopicon
+
+          [Run]
+          Filename: "{app}\{#MyAppExeName}"; \
+            Description: "Launch {#MyAppName}"; \
+            Flags: nowait postinstall skipifsilent
+
+          [UninstallDelete]
+          Type: filesandordirs; Name: "{app}"
+
+          "@ | Out-File -FilePath "installer\almajedPRO.iss" -Encoding utf8
+
+      # 11. بناء Setup.exe باستخدام Inno Setup
+      - name: Build Installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+
+          if (-not (Test-Path $iscc)) {
+            $iscc = "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+          }
+
+          if (-not (Test-Path $iscc)) {
+            Write-Error "Inno Setup compiler (ISCC.exe) was not found."
+            exit 1
+          }
+
+          & $iscc "installer\almajedPRO.iss"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Inno Setup compilation failed."
+            exit $LASTEXITCODE
+          }
+
+      # 12. التحقق من Setup.exe
+      - name: Verify Installer
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "installer\almajedPRO-Setup.exe")) {
+            Write-Error "almajedPRO-Setup.exe was not created."
+            exit 1
+          }
+
+          Write-Host "Installer created successfully:"
+          Get-Item "installer\almajedPRO-Setup.exe"
+
+      # 13. رفع Setup.exe إلى Artifacts
+      - name: Upload Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: almajedPRO-Windows-Installer
+          path: installer/almajedPRO-Setup.exe
+          if-no-files-found: error
+          retention-days: 14
