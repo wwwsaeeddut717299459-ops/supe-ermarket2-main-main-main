@@ -90,7 +90,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
   final _customerFocusNode = FocusNode();
 
   final List<_CartItem> _cart = [];
-  final List<_HeldInvoice> _heldInvoices = []; // قائمة الفواتير المعلقة
+  final List<_HeldInvoice> _heldInvoices = [];
   final StringBuffer _barcodeBuffer = StringBuffer();
 
   // أدوات البحث السريع والـ Debouncers
@@ -459,7 +459,6 @@ class _SalesPageState extends ConsumerState<SalesPage> {
     });
   }
 
-  // ميزة تعليق الفاتورة (F10)
   void _holdCurrentInvoice() {
     if (_cart.isEmpty) {
       _showMessage('السلة فارغة، لا يمكن تعليق فاتورة فارغة');
@@ -487,7 +486,6 @@ class _SalesPageState extends ConsumerState<SalesPage> {
     _showMessage('تم تعليق الفاتورة بنجاح (معلقة: ${_heldInvoices.length})');
   }
 
-  // ميزة نافذة استعادة الفواتير المعلقة (F11)
   Future<void> _showHeldInvoicesDialog() async {
     if (_heldInvoices.isEmpty) {
       _showMessage('لا توجد فواتير معلقة حالياً');
@@ -1268,7 +1266,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
               decoration: const InputDecoration(
                 labelText: 'ملاحظات',
                 isDense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 prefixIcon: Icon(Icons.notes, size: 16),
                 border: OutlineInputBorder(),
               ),
