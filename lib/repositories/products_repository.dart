@@ -8,12 +8,12 @@ class ProductsRepository {
 
   ProductsRepository(this.dao);
 
-  Future<List<Product>> getAll({int limit = 200}) {
-    return dao.getAll(limit: limit);
+    Future<List<Product>> getAll({int limit = 200}) {
+    return dao.getAll(limit); // تم إزالة limit:
   }
 
   Future<List<Product>> search(String query, {int limit = 100}) {
-    return dao.search(query, limit: limit);
+    return dao.search(query, limit); // تم إزالة limit:
   }
 
   Future<Product?> getById(int id) {
