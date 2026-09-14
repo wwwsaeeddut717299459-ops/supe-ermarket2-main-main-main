@@ -14,42 +14,53 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
   // GET ALL
   // ============================================================
 
-  Future<List<Product>> getAll() {
-    return (select(products)
-          ..orderBy([
-            (product) => OrderingTerm(
-                  expression: product.name,
-                  mode: OrderingMode.asc,
-                ),
-          ]))
-        .get();
+  Future<List<Product>> getAll({int? limit}) {
+    final query = select(products)
+      ..orderBy([
+        (product) => OrderingTerm(
+              expression: product.name,
+              mode: OrderingMode.asc,
+            ),
+      ]);
+    
+    if (limit != null) {
+      query.limit(limit);
+    }
+    
+    return query.get();
   }
 
   // ============================================================
   // SEARCH
   // ============================================================
 
-  Future<List<Product>> search(String query) {
-    final normalized = query.trim();
+  Future<List<Product>> search(String queryStr, {int? limit}) {
+    final normalized = queryStr.trim();
 
     if (normalized.isEmpty) {
-      return getAll();
+      return getAll(limit: limit);
     }
 
-    return (select(products)
-          ..where(
-            (product) =>
-                product.name.like('%$normalized%') |
-                product.barcode.like('%$normalized%'),
-          )
-          ..orderBy([
-            (product) => OrderingTerm(
-                  expression: product.name,
-                  mode: OrderingMode.asc,
-                ),
-          ]))
-        .get();
+    final query = select(products)
+      ..where(
+        (product) =>
+            product.name.like('%$normalized%') |
+            product.barcode.like('%$normalized%'),
+      )
+      ..orderBy([
+        (product) => OrderingTerm(
+              expression: product.name,
+              mode: OrderingMode.asc,
+            ),
+      ]);
+
+    if (limit != null) {
+      query.limit(limit);
+    }
+
+    return query.get();
   }
+
 
   // ============================================================
   // GET BY ID
