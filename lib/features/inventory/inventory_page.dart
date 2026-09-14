@@ -8,14 +8,11 @@ class InventoryPage extends ConsumerStatefulWidget {
   const InventoryPage({super.key});
 
   @override
-  ConsumerState<InventoryPage> createState() =>
-      _InventoryPageState();
+  ConsumerState<InventoryPage> createState() => _InventoryPageState();
 }
 
-class _InventoryPageState
-    extends ConsumerState<InventoryPage> {
+class _InventoryPageState extends ConsumerState<InventoryPage> {
   bool _loading = true;
-
   List<Product> _products = [];
 
   @override
@@ -30,11 +27,8 @@ class _InventoryPageState
     });
 
     try {
-      final repository =
-          ref.read(productsRepositoryProvider);
-
-      final products =
-          await repository.getAll();
+      final repository = ref.read(productsRepositoryProvider);
+      final products = await repository.getAll();
 
       if (!mounted) return;
 
@@ -49,15 +43,12 @@ class _InventoryPageState
         _loading = false;
       });
 
-      _showMessage(
-        'حدث خطأ: $e',
-      );
+      _showMessage('حدث خطأ: $e');
     }
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
       ),
@@ -66,48 +57,27 @@ class _InventoryPageState
 
   int _daysUntil(DateTime date) {
     final now = DateTime.now();
-
-    final today = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    );
-
-    final expiry = DateTime(
-      date.year,
-      date.month,
-      date.day,
-    );
-
-    return expiry
-        .difference(today)
-        .inDays;
+    final today = DateTime(now.year, now.month, now.day);
+    final expiry = DateTime(date.year, date.month, date.day);
+    return expiry.difference(today).inDays;
   }
 
   bool _isLowStock(Product product) {
-    return product.stockQuantity <=
-        product.minimumStock;
+    return product.stockQuantity <= product.minimumStock;
   }
 
   bool _isExpired(Product product) {
     if (product.expiryDate == null) {
       return false;
     }
-
-    return _daysUntil(
-          product.expiryDate!,
-        ) <
-        0;
+    return _daysUntil(product.expiryDate!) < 0;
   }
 
   bool _isExpiringSoon(Product product) {
     if (product.expiryDate == null) {
       return false;
     }
-
-    final days =
-        _daysUntil(product.expiryDate!);
-
+    final days = _daysUntil(product.expiryDate!);
     return days >= 0 && days <= 30;
   }
 
@@ -115,7 +85,6 @@ class _InventoryPageState
     if (date == null) {
       return 'غير محدد';
     }
-
     return '${date.day.toString().padLeft(2, '0')}/'
         '${date.month.toString().padLeft(2, '0')}/'
         '${date.year}';
@@ -125,161 +94,133 @@ class _InventoryPageState
     if (value == value.roundToDouble()) {
       return value.toInt().toString();
     }
-
     return value.toStringAsFixed(2);
   }
 
   @override
   Widget build(BuildContext context) {
-    final lowStock = _products
-        .where(_isLowStock)
-        .toList();
-
-    final expired = _products
-        .where(_isExpired)
-        .toList();
-
-    final expiring = _products
-        .where(_isExpiringSoon)
-        .toList();
+    final lowStock = _products.where(_isLowStock).toList();
+    final expired = _products.where(_isExpired).toList();
+    final expiring = _products.where(_isExpiringSoon).toList();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'إدارة المخزون',
-        ),
+        title: const Text('إدارة المخزون'),
         actions: [
           IconButton(
             tooltip: 'تحديث',
-            onPressed: _loading
-                ? null
-                : _load,
-            icon:
-                const Icon(Icons.refresh),
+            onPressed: _loading ? null : _load,
+            icon: const Icon(Icons.refresh),
           ),
         ],
       ),
       body: _loading
           ? const Center(
-              child:
-                  CircularProgressIndicator(),
+              child: CircularProgressIndicator(),
             )
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
-                padding:
-                    const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(16),
                 children: [
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      _StatCard(
-                        title:
-                            'إجمالي المنتجات',
-                        value:
-                            '${_products.length}',
-                        icon:
-                            Icons.inventory_2,
-                      ),
-                      _StatCard(
-                        title:
-                            'مخزون منخفض',
-                        value:
-                            '${lowStock.length}',
-                        icon:
-                            Icons.warning,
-                      ),
-                      _StatCard(
-                        title:
-                            'منتهي الصلاحية',
-                        value:
-                            '${expired.length}',
-                        icon:
-                            Icons
-                                .dangerous,
-                      ),
-                      _StatCard(
-                        title:
-                            'ينتهي خلال 30 يوم',
-                        value:
-                            '${expiring.length}',
-                        icon:
-                            Icons
-                                .event_busy,
-                      ),
-                    ],
+                  // استخدام LayoutBuilder لضبط عرض البطاقات ديناميكياً بحسب الشاشة وتفادي أي Overflow
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      // حساب عرض البطاقة لتعمل بشكل متجاوب (بطاقتان في السطر للشاشات الصغيرة أو 4 إذا اتسع العرض)
+                      final availableWidth = constraints.maxWidth;
+                      final cardWidth = availableWidth > 900
+                          ? (availableWidth - 36) / 4
+                          : (availableWidth - 12) / 2;
+
+                      return Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          SizedBox(
+                            width: cardWidth,
+                            child: _StatCard(
+                              title: 'إجمالي المنتجات',
+                              value: '${_products.length}',
+                              icon: Icons.inventory_2,
+                            ),
+                          ),
+                          SizedBox(
+                            width: cardWidth,
+                            child: _StatCard(
+                              title: 'مخزون منخفض',
+                              value: '${lowStock.length}',
+                              icon: Icons.warning,
+                            ),
+                          ),
+                          SizedBox(
+                            width: cardWidth,
+                            child: _StatCard(
+                              title: 'منتهي الصلاحية',
+                              value: '${expired.length}',
+                              icon: Icons.dangerous,
+                            ),
+                          ),
+                          SizedBox(
+                            width: cardWidth,
+                            child: _StatCard(
+                              title: 'ينتهي خلال 30 يوم',
+                              value: '${expiring.length}',
+                              icon: Icons.event_busy,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
 
                   const SizedBox(height: 24),
 
                   if (lowStock.isNotEmpty)
                     _buildSection(
-                      title:
-                          '⚠️ المنتجات التي أوشكت على النفاد',
-                      products:
-                          lowStock,
-                      type:
-                          _InventoryType.lowStock,
+                      title: '⚠️ المنتجات التي أوشكت على النفاد',
+                      products: lowStock,
+                      type: _InventoryType.lowStock,
                     ),
 
                   if (expired.isNotEmpty)
                     _buildSection(
-                      title:
-                          '🔴 المنتجات منتهية الصلاحية',
-                      products:
-                          expired,
-                      type:
-                          _InventoryType.expired,
+                      title: '🔴 المنتجات منتهية الصلاحية',
+                      products: expired,
+                      type: _InventoryType.expired,
                     ),
 
                   if (expiring.isNotEmpty)
                     _buildSection(
-                      title:
-                          '🟠 المنتجات القريبة من انتهاء الصلاحية',
-                      products:
-                          expiring,
-                      type:
-                          _InventoryType.expiring,
+                      title: '🟠 المنتجات القريبة من انتهاء الصلاحية',
+                      products: expiring,
+                      type: _InventoryType.expiring,
                     ),
 
                   if (lowStock.isEmpty &&
                       expired.isEmpty &&
                       expiring.isEmpty)
                     const Padding(
-                      padding:
-                          EdgeInsets.all(50),
+                      padding: EdgeInsets.all(50),
                       child: Center(
                         child: Column(
                           children: [
                             Icon(
-                              Icons
-                                  .check_circle,
+                              Icons.check_circle,
                               size: 70,
-                              color:
-                                  Colors.green,
+                              color: Colors.green,
                             ),
-                            SizedBox(
-                              height: 16,
-                            ),
+                            SizedBox(height: 16),
                             Text(
                               'المخزون بحالة جيدة',
-                              style:
-                                  TextStyle(
-                                fontSize:
-                                    20,
-                                fontWeight:
-                                    FontWeight.bold,
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                            SizedBox(
-                              height: 8,
-                            ),
+                            SizedBox(height: 8),
                             Text(
                               'لا توجد منتجات منخفضة أو قريبة من انتهاء الصلاحية',
-                              textAlign:
-                                  TextAlign
-                                      .center,
+                              textAlign: TextAlign.center,
                             ),
                           ],
                         ),
@@ -297,26 +238,18 @@ class _InventoryPageState
     required _InventoryType type,
   }) {
     return Card(
-      margin:
-          const EdgeInsets.only(
-        bottom: 20,
-      ),
-      clipBehavior:
-          Clip.antiAlias,
+      margin: const EdgeInsets.only(bottom: 20),
+      clipBehavior: Clip.antiAlias,
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding:
-                const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             child: Text(
               title,
-              style:
-                  const TextStyle(
+              style: const TextStyle(
                 fontSize: 18,
-                fontWeight:
-                    FontWeight.bold,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),
@@ -324,19 +257,12 @@ class _InventoryPageState
           ...products.map(
             (product) {
               return ListTile(
-                leading:
-                    CircleAvatar(
+                leading: CircleAvatar(
                   child: Text(
-                    product.name
-                            .isNotEmpty
-                        ? product
-                            .name[0]
-                        : '?',
+                    product.name.isNotEmpty ? product.name[0] : '?',
                   ),
                 ),
-                title: Text(
-                  product.name,
-                ),
+                title: Text(product.name),
                 subtitle: Text(
                   'المخزون: ${_formatNumber(product.stockQuantity)} '
                   '${product.unit}\n'
@@ -344,11 +270,7 @@ class _InventoryPageState
                   'الانتهاء: ${_formatDate(product.expiryDate)}',
                 ),
                 isThreeLine: true,
-                trailing:
-                    _buildStatus(
-                  product,
-                  type,
-                ),
+                trailing: _buildStatus(product, type),
               );
             },
           ),
@@ -357,35 +279,26 @@ class _InventoryPageState
     );
   }
 
-  Widget _buildStatus(
-    Product product,
-    _InventoryType type,
-  ) {
-    if (type ==
-        _InventoryType.lowStock) {
+  Widget _buildStatus(Product product, _InventoryType type) {
+    if (type == _InventoryType.lowStock) {
       return const Icon(
         Icons.warning,
         color: Colors.red,
       );
     }
 
-    if (product.expiryDate ==
-        null) {
+    if (product.expiryDate == null) {
       return const SizedBox();
     }
 
-    final days =
-        _daysUntil(
-      product.expiryDate!,
-    );
+    final days = _daysUntil(product.expiryDate!);
 
     if (days < 0) {
       return const Text(
         'منتهي',
         style: TextStyle(
           color: Colors.red,
-          fontWeight:
-              FontWeight.bold,
+          fontWeight: FontWeight.bold,
         ),
       );
     }
@@ -393,11 +306,8 @@ class _InventoryPageState
     return Text(
       '$days يوم',
       style: TextStyle(
-        color: days <= 7
-            ? Colors.red
-            : Colors.orange,
-        fontWeight:
-            FontWeight.bold,
+        color: days <= 7 ? Colors.red : Colors.orange,
+        fontWeight: FontWeight.bold,
       ),
     );
   }
@@ -423,48 +333,39 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: SizedBox(
-        width: 220,
-        child: Padding(
-          padding:
-              const EdgeInsets.all(18),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 36,
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 32,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment
-                          .start,
-                  children: [
-                    Text(
-                      title,
-                      style:
-                          const TextStyle(
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(
-                      height: 4,
-                    ),
-                    Text(
-                      value,
-                      style:
-                          const TextStyle(
-                        fontSize: 25,
-                        fontWeight:
-                            FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
