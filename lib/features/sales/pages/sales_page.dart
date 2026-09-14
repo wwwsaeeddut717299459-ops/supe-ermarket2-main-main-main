@@ -442,6 +442,12 @@ class _SalesPageState extends ConsumerState<SalesPage> {
       }
 
       if (!mounted) return;
+      
+      // إغلاق نافذة الدفع لو كانت مفتوحة
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
       await _showSuccessDialog(invoiceNumber: invoiceNumber, saleId: saleId);
 
       if (!mounted) return;
@@ -516,6 +522,32 @@ class _SalesPageState extends ConsumerState<SalesPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _openPaymentDialog() async {
+    if (_cart.isEmpty) {
+      _showMessage('أضف منتجات إلى الفاتورة أولاً');
+      return;
+    }
+    if (_paymentMethod == 'cash') {
+      _paidController.text = total.toStringAsFixed(2);
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (dialogContext) {
+        return SafeArea(
+          child: FractionallySizedBox(
+            heightFactor: 0.85,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(10, 2, 10, 12),
+              child: _buildSummary(),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showShortcutsHelpDialog() {
     showDialog(
       context: context,
@@ -530,12 +562,13 @@ class _SalesPageState extends ConsumerState<SalesPage> {
         content: const Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(leading: Chip(label: Text('F1')), title: Text('التركيز على حقل البحث عن منتج')),
+            ListTile(leading: Chip(label: Text('F1')), title: Text('فتح نافذة الدفع والإنهاء')),
             ListTile(leading: Chip(label: Text('F2')), title: Text('تحويل طريقة الدفع إلى آجل')),
             ListTile(leading: Chip(label: Text('F3')), title: Text('التركيز على حقل البحث عن العميل')),
             ListTile(leading: Chip(label: Text('F4')), title: Text('إلغاء الفاتورة وبدء فاتورة جديدة')),
-            ListTile(leading: Chip(label: Text('F5')), title: Text('حفظ وإتمام عملية البيع')),
+            ListTile(leading: Chip(label: Text('F5')), title: Text('حفظ وإتمام عملية البيع مباشرة')),
             ListTile(leading: Chip(label: Text('F6')), title: Text('التركيز على حقل الباركود')),
+            ListTile(leading: Chip(label: Text('F7')), title: Text('التركيز على حقل البحث عن منتج')),
             ListTile(leading: Chip(label: Text('F12')), title: Text('عرض نافذة الاختصارات')),
           ],
         ),
@@ -580,7 +613,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
               controller: _searchController,
               focusNode: _searchFocusNode,
               decoration: const InputDecoration(
-                labelText: 'بحث عن منتج (F1)',
+                labelText: 'بحث عن منتج (F7)',
                 hintText: 'اكتب اسم المنتج أو الباركود',
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -1007,7 +1040,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 prefixIcon: Icon(Icons.notes, size: 16),
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
             ),
 
@@ -1042,7 +1075,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
               child: OutlinedButton.icon(
                 onPressed: _saving ? null : _clearSale,
                 icon: const Icon(Icons.clear, size: 14),
-                label: const Text('إلغاء الفاتورة (F4)', style: TextStyle(fontSize: 11)),
+                label: const Text('إلغاء الفاتورة (F4)', style: const TextStyle(fontSize: 11)),
               ),
             ),
           ],
@@ -1216,25 +1249,6 @@ class _SalesPageState extends ConsumerState<SalesPage> {
     );
   }
 
-  Future<void> _openPaymentDialog() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (dialogContext) {
-        return SafeArea(
-          child: FractionallySizedBox(
-            heightFactor: 0.85,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(10, 2, 10, 12),
-              child: _buildSummary(),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildLaptopLayout() {
     return Column(
       children: [
@@ -1283,7 +1297,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                   FilledButton.icon(
                     onPressed: _cart.isEmpty || _saving ? null : _openPaymentDialog,
                     icon: const Icon(Icons.payments_outlined, size: 16),
-                    label: const Text('الدفع والإنهاء (F5)', style: TextStyle(fontSize: 11)),
+                    label: const Text('الدفع والإنهاء (F1)', style: TextStyle(fontSize: 11)),
                   ),
                 ],
               ),
@@ -1300,19 +1314,20 @@ class _SalesPageState extends ConsumerState<SalesPage> {
       autofocus: true,
       child: Shortcuts(
         shortcuts: <ShortcutActivator, Intent>{
-          const SingleActivator(LogicalKeyboardKey.f1): const _FocusProductSearchIntent(),
+          const SingleActivator(LogicalKeyboardKey.f1): const _OpenPaymentIntent(),
           const SingleActivator(LogicalKeyboardKey.f2): const _CreditSaleIntent(),
           const SingleActivator(LogicalKeyboardKey.f3): const _FocusCustomerIntent(),
           const SingleActivator(LogicalKeyboardKey.f4): const _NewSaleIntent(),
           const SingleActivator(LogicalKeyboardKey.f5): const _CompleteSaleIntent(),
           const SingleActivator(LogicalKeyboardKey.f6): const _FocusBarcodeSearchIntent(),
+          const SingleActivator(LogicalKeyboardKey.f7): const _FocusProductSearchIntent(),
           const SingleActivator(LogicalKeyboardKey.f12): const _ShowHelpIntent(),
         },
         child: Actions(
           actions: <Type, Action<Intent>>{
-            _FocusProductSearchIntent: CallbackAction<_FocusProductSearchIntent>(
+            _OpenPaymentIntent: CallbackAction<_OpenPaymentIntent>(
               onInvoke: (_) {
-                _searchFocusNode.requestFocus();
+                if (!_saving) _openPaymentDialog();
                 return null;
               },
             ),
@@ -1353,6 +1368,12 @@ class _SalesPageState extends ConsumerState<SalesPage> {
             _FocusBarcodeSearchIntent: CallbackAction<_FocusBarcodeSearchIntent>(
               onInvoke: (_) {
                 _barcodeFocusNode.requestFocus();
+                return null;
+              },
+            ),
+            _FocusProductSearchIntent: CallbackAction<_FocusProductSearchIntent>(
+              onInvoke: (_) {
+                _searchFocusNode.requestFocus();
                 return null;
               },
             ),
@@ -1410,7 +1431,6 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                 ? const Center(child: CircularProgressIndicator())
                 : LayoutBuilder(
                     builder: (context, constraints) {
-                      // تعديل الشرط لضمان تفعيل تخطيط الشاشات المدمجة تلقائياً مع دقة 1024x768
                       final isCompact = constraints.maxWidth < 1150 || constraints.maxHeight < 720;
                       return Padding(
                         padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
@@ -1450,10 +1470,11 @@ class _SalesPageState extends ConsumerState<SalesPage> {
   }
 }
 
-class _FocusProductSearchIntent extends Intent { const _FocusProductSearchIntent(); }
+class _OpenPaymentIntent extends Intent { const _OpenPaymentIntent(); }
 class _CreditSaleIntent extends Intent { const _CreditSaleIntent(); }
 class _FocusCustomerIntent extends Intent { const _FocusCustomerIntent(); }
 class _NewSaleIntent extends Intent { const _NewSaleIntent(); }
 class _CompleteSaleIntent extends Intent { const _CompleteSaleIntent(); }
 class _FocusBarcodeSearchIntent extends Intent { const _FocusBarcodeSearchIntent(); }
+class _FocusProductSearchIntent extends Intent { const _FocusProductSearchIntent(); }
 class _ShowHelpIntent extends Intent { const _ShowHelpIntent(); }
