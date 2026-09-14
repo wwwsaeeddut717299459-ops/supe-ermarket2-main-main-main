@@ -31,6 +31,33 @@ class _CartItem {
   }
 }
 
+// هيكل لحفظ بيانات الفاتورة المعلقة
+class _HeldInvoice {
+  final String id;
+  final String title;
+  final DateTime time;
+  final List<_CartItem> cart;
+  final Customer? customer;
+  final String paymentMethod;
+  final String discount;
+  final String paid;
+  final String notes;
+  final String currencyCode;
+
+  _HeldInvoice({
+    required this.id,
+    required this.title,
+    required this.time,
+    required this.cart,
+    required this.customer,
+    required this.paymentMethod,
+    required this.discount,
+    required this.paid,
+    required this.notes,
+    required this.currencyCode,
+  });
+}
+
 class _SalesPageState extends ConsumerState<SalesPage> {
   final _barcodeController = TextEditingController();
   final _searchController = TextEditingController();
@@ -44,6 +71,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
   final _customerFocusNode = FocusNode();
 
   final List<_CartItem> _cart = [];
+  final List<_HeldInvoice> _heldInvoices = []; // قائمة الفواتير المعلقة
   final StringBuffer _barcodeBuffer = StringBuffer();
 
   bool _saving = false;
@@ -351,6 +379,128 @@ class _SalesPageState extends ConsumerState<SalesPage> {
     });
   }
 
+  // ميزة تعليق الفاتورة (F10)
+  void _holdCurrentInvoice() {
+    if (_cart.isEmpty) {
+      _showMessage('السلة فارغة، لا يمكن تعليق فاتورة فارغة');
+      return;
+    }
+
+    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    final customerName = _selectedCustomer?.name ?? 'بدون عميل';
+    final title = 'فاتورة رقم #${_heldInvoices.length + 1} ($customerName)';
+
+    _heldInvoices.add(_HeldInvoice(
+      id: id,
+      title: title,
+      time: DateTime.now(),
+      cart: List.from(_cart),
+      customer: _selectedCustomer,
+      paymentMethod: _paymentMethod,
+      discount: _discountController.text,
+      paid: _paidController.text,
+      notes: _notesController.text,
+      currencyCode: _currencyCode,
+    ));
+
+    _clearSale();
+    _showMessage('تم تعليق الفاتورة بنجاح (معلقة: ${_heldInvoices.length})');
+  }
+
+  // ميزة نافذة استعادة الفواتير المعلقة (F11)
+  Future<void> _showHeldInvoicesDialog() async {
+    if (_heldInvoices.isEmpty) {
+      _showMessage('لا توجد فواتير معلقة حالياً');
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.pause_circle_outline, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('الفواتير المعلقة'),
+            ],
+          ),
+          content: SizedBox(
+            width: 400,
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: _heldInvoices.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final held = _heldInvoices[index];
+                return ListTile(
+                  dense: true,
+                  title: Text(held.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('الأصناف: ${held.cart.length} • الوقت: ${held.time.hour}:${held.time.minute.toString().padLeft(2, '0')}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FilledButton.tonal(
+                        onPressed: () {
+                          _restoreInvoice(held);
+                          Navigator.pop(dialogContext);
+                        },
+                        child: const Text('استعادة', style: TextStyle(fontSize: 11)),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
+                        onPressed: () {
+                          setState(() {
+                            _heldInvoices.removeAt(index);
+                          });
+                          Navigator.pop(dialogContext);
+                          _showHeldInvoicesDialog(); // إعادة فتح القائمة لتحديث العرض
+                        },
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إغلاق'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _restoreInvoice(_HeldInvoice held) {
+    if (_cart.isNotEmpty) {
+      _showMessage('يرجى تفريغ السلة الحالية أو تعليقها قبل استعادة فاتورة أخرى');
+      return;
+    }
+
+    setState(() {
+      _cart.clear();
+      _cart.addAll(held.cart);
+      _selectedCustomer = held.customer;
+      if (held.customer != null) {
+        _customerSearchController.text = held.customer!.name;
+      } else {
+        _customerSearchController.clear();
+      }
+      _paymentMethod = held.paymentMethod;
+      _discountController.text = held.discount;
+      _paidController.text = held.paid;
+      _notesController.text = held.notes;
+      _currencyCode = held.currencyCode;
+      _heldInvoices.removeWhere((item) => item.id == held.id);
+    });
+
+    _showMessage('تمت استعادة الفاتورة بنجاح');
+  }
+
   Future<void> _saveSale() async {
     if (_cart.isEmpty) {
       _showMessage('أضف منتجات إلى الفاتورة أولاً');
@@ -443,7 +593,6 @@ class _SalesPageState extends ConsumerState<SalesPage> {
 
       if (!mounted) return;
       
-      // إغلاق نافذة الدفع لو كانت مفتوحة
       if (Navigator.canPop(context)) {
         Navigator.pop(context);
       }
@@ -569,6 +718,8 @@ class _SalesPageState extends ConsumerState<SalesPage> {
             ListTile(leading: Chip(label: Text('F5')), title: Text('حفظ وإتمام عملية البيع مباشرة')),
             ListTile(leading: Chip(label: Text('F6')), title: Text('التركيز على حقل الباركود')),
             ListTile(leading: Chip(label: Text('F7')), title: Text('التركيز على حقل البحث عن منتج')),
+            ListTile(leading: Chip(label: Text('F10')), title: Text('تعليق الفاتورة الحالية')),
+            ListTile(leading: Chip(label: Text('F11')), title: Text('استعادة الفواتير المعلقة')),
             ListTile(leading: Chip(label: Text('F12')), title: Text('عرض نافذة الاختصارات')),
           ],
         ),
@@ -1038,9 +1189,9 @@ class _SalesPageState extends ConsumerState<SalesPage> {
               decoration: const InputDecoration(
                 labelText: 'ملاحظات',
                 isDense: true,
-                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 prefixIcon: Icon(Icons.notes, size: 16),
-                border: const OutlineInputBorder(),
+                border: OutlineInputBorder(),
               ),
             ),
 
@@ -1069,13 +1220,45 @@ class _SalesPageState extends ConsumerState<SalesPage> {
 
             const SizedBox(height: 4),
 
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 32,
+                    child: OutlinedButton.icon(
+                      onPressed: _saving ? null : _holdCurrentInvoice,
+                      icon: const Icon(Icons.pause, size: 14),
+                      label: Text('تعليق (F10)', style: const TextStyle(fontSize: 10)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: SizedBox(
+                    height: 32,
+                    child: OutlinedButton.icon(
+                      onPressed: _saving ? null : _showHeldInvoicesDialog,
+                      icon: Badge(
+                        isLabelVisible: _heldInvoices.isNotEmpty,
+                        label: Text('${_heldInvoices.length}'),
+                        child: const Icon(Icons.unarchive, size: 14),
+                      ),
+                      label: Text('المعلقة (F11)', style: const TextStyle(fontSize: 10)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 4),
+
             SizedBox(
               width: double.infinity,
               height: 32,
               child: OutlinedButton.icon(
                 onPressed: _saving ? null : _clearSale,
                 icon: const Icon(Icons.clear, size: 14),
-                label: const Text('إلغاء الفاتورة (F4)', style: const TextStyle(fontSize: 11)),
+                label: const Text('إلغاء الفاتورة (F4)', style: TextStyle(fontSize: 11)),
               ),
             ),
           ],
@@ -1143,6 +1326,14 @@ class _SalesPageState extends ConsumerState<SalesPage> {
               ],
             ),
           ),
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            tooltip: 'تعليق الفاتورة (F10)',
+            onPressed: _saving || _cart.isEmpty ? null : _holdCurrentInvoice,
+            icon: const Icon(Icons.pause_circle_outline, size: 18),
+          ),
+          const SizedBox(width: 4),
           IconButton(
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -1321,6 +1512,8 @@ class _SalesPageState extends ConsumerState<SalesPage> {
           const SingleActivator(LogicalKeyboardKey.f5): const _CompleteSaleIntent(),
           const SingleActivator(LogicalKeyboardKey.f6): const _FocusBarcodeSearchIntent(),
           const SingleActivator(LogicalKeyboardKey.f7): const _FocusProductSearchIntent(),
+          const SingleActivator(LogicalKeyboardKey.f10): const _HoldInvoiceIntent(),
+          const SingleActivator(LogicalKeyboardKey.f11): const _RestoreInvoiceIntent(),
           const SingleActivator(LogicalKeyboardKey.f12): const _ShowHelpIntent(),
         },
         child: Actions(
@@ -1377,6 +1570,18 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                 return null;
               },
             ),
+            _HoldInvoiceIntent: CallbackAction<_HoldInvoiceIntent>(
+              onInvoke: (_) {
+                if (!_saving) _holdCurrentInvoice();
+                return null;
+              },
+            ),
+            _RestoreInvoiceIntent: CallbackAction<_RestoreInvoiceIntent>(
+              onInvoke: (_) {
+                if (!_saving) _showHeldInvoicesDialog();
+                return null;
+              },
+            ),
             _ShowHelpIntent: CallbackAction<_ShowHelpIntent>(
               onInvoke: (_) {
                 _showShortcutsHelpDialog();
@@ -1397,6 +1602,15 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                 ],
               ),
               actions: [
+                IconButton(
+                  tooltip: 'الفواتير المعلقة (F11)',
+                  icon: Badge(
+                    isLabelVisible: _heldInvoices.isNotEmpty,
+                    label: Text('${_heldInvoices.length}'),
+                    child: const Icon(Icons.pause_circle_outline, size: 18),
+                  ),
+                  onPressed: _showHeldInvoicesDialog,
+                ),
                 IconButton(
                   tooltip: 'اختصارات لوحة المفاتيح (F12)',
                   icon: const Icon(Icons.keyboard_outlined, size: 18),
@@ -1450,6 +1664,11 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                                   const Expanded(
                                     child: Text('almajedPRO • مبيعات سريعة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                                   ),
+                                  if (_heldInvoices.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 8),
+                                      child: Text('معلقة: ${_heldInvoices.length} (F11)', style: const TextStyle(fontSize: 10, color: Colors.orange, fontWeight: FontWeight.bold)),
+                                    ),
                                   Text(_paymentMethod == 'cash' ? 'نقدي' : 'آجل', style: const TextStyle(fontSize: 11)),
                                 ],
                               ),
@@ -1477,4 +1696,6 @@ class _NewSaleIntent extends Intent { const _NewSaleIntent(); }
 class _CompleteSaleIntent extends Intent { const _CompleteSaleIntent(); }
 class _FocusBarcodeSearchIntent extends Intent { const _FocusBarcodeSearchIntent(); }
 class _FocusProductSearchIntent extends Intent { const _FocusProductSearchIntent(); }
+class _HoldInvoiceIntent extends Intent { const _HoldInvoiceIntent(); }
+class _RestoreInvoiceIntent extends Intent { const _RestoreInvoiceIntent(); }
 class _ShowHelpIntent extends Intent { const _ShowHelpIntent(); }
