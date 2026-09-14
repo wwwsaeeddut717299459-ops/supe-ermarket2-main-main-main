@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +12,23 @@ import '../../../services/currency_service.dart';
 import '../../../services/audit_service.dart';
 import '../../../services/invoice_print_service.dart';
 import '../../auth/auth_providers.dart' as auth;
+
+// كلاس لتأخير البحث ومنع تنفيذه مع كل حرف (Debouncer)
+class Debouncer {
+  final Duration delay;
+  Timer? _timer;
+
+  Debouncer({this.delay = const Duration(milliseconds: 250)});
+
+  void run(VoidCallback action) {
+    _timer?.cancel();
+    _timer = Timer(delay, action);
+  }
+
+  void dispose() {
+    _timer?.cancel();
+  }
+}
 
 class SalesPage extends ConsumerStatefulWidget {
   const SalesPage({super.key});
@@ -74,6 +93,15 @@ class _SalesPageState extends ConsumerState<SalesPage> {
   final List<_HeldInvoice> _heldInvoices = []; // قائمة الفواتير المعلقة
   final StringBuffer _barcodeBuffer = StringBuffer();
 
+  // أدوات البحث السريع والـ Debouncers
+  final _productDebouncer = Debouncer(delay: const Duration(milliseconds: 250));
+  final _customerDebouncer = Debouncer(delay: const Duration(milliseconds: 250));
+
+  List<Product> _cachedProducts = [];
+  List<Customer> _cachedCustomers = [];
+  bool _isSearchingProducts = false;
+  bool _isSearchingCustomers = false;
+
   bool _saving = false;
   bool _currencyReady = false;
   late final CurrencyService _currency;
@@ -99,12 +127,14 @@ class _SalesPageState extends ConsumerState<SalesPage> {
 
     _paidController.addListener(_refresh);
     _discountController.addListener(_refresh);
-    _customerSearchController.addListener(_refresh);
   }
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleGlobalKeyInput);
+
+    _productDebouncer.dispose();
+    _customerDebouncer.dispose();
 
     _barcodeController.dispose();
     _searchController.dispose();
@@ -205,14 +235,62 @@ class _SalesPageState extends ConsumerState<SalesPage> {
     return value < 0 ? 0 : value;
   }
 
-  Future<List<Product>> _searchProducts(String query) {
-    final repository = ref.read(productsRepositoryProvider);
-    return repository.search(query);
+  // تنفيذ بحث المنتجات بسرعة عالية بدون تحميل مستمر
+  Future<void> _performProductSearch(String query) async {
+    if (query.trim().isEmpty) {
+      if (mounted) {
+        setState(() {
+          _cachedProducts = [];
+          _isSearchingProducts = false;
+        });
+      }
+      return;
+    }
+
+    if (mounted) setState(() => _isSearchingProducts = true);
+
+    try {
+      final repository = ref.read(productsRepositoryProvider);
+      final results = await repository.search(query.trim());
+
+      if (!mounted) return;
+      setState(() {
+        _cachedProducts = results;
+        _isSearchingProducts = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSearchingProducts = false);
+    }
   }
 
-  Future<List<Customer>> _searchCustomers(String query) {
-    final database = ref.read(databaseProvider);
-    return database.customersDao.search(query.trim());
+  // تنفيذ بحث العملاء بسرعة فائقة
+  Future<void> _performCustomerSearch(String query) async {
+    if (query.trim().isEmpty) {
+      if (mounted) {
+        setState(() {
+          _cachedCustomers = [];
+          _isSearchingCustomers = false;
+        });
+      }
+      return;
+    }
+
+    if (mounted) setState(() => _isSearchingCustomers = true);
+
+    try {
+      final database = ref.read(databaseProvider);
+      final results = await database.customersDao.search(query.trim());
+
+      if (!mounted) return;
+      setState(() {
+        _cachedCustomers = results;
+        _isSearchingCustomers = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSearchingCustomers = false);
+    }
   }
 
   Future<void> _addByBarcode() async {
@@ -369,6 +447,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
     setState(() {
       _selectedCustomer = customer;
       _customerSearchController.text = customer.name;
+      _cachedCustomers = [];
     });
   }
 
@@ -376,6 +455,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
     setState(() {
       _selectedCustomer = null;
       _customerSearchController.clear();
+      _cachedCustomers = [];
     });
   }
 
@@ -455,7 +535,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                             _heldInvoices.removeAt(index);
                           });
                           Navigator.pop(dialogContext);
-                          _showHeldInvoicesDialog(); // إعادة فتح القائمة لتحديث العرض
+                          _showHeldInvoicesDialog();
                         },
                       ),
                     ],
@@ -622,6 +702,8 @@ class _SalesPageState extends ConsumerState<SalesPage> {
       _paymentMethod = 'cash';
       _selectedCustomer = null;
       _customerSearchController.clear();
+      _cachedProducts.clear();
+      _searchController.clear();
     });
 
     _barcodeController.clear();
@@ -771,7 +853,11 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                 prefixIcon: Icon(Icons.search, size: 18),
                 border: OutlineInputBorder(),
               ),
-              onChanged: (_) => setState(() {}),
+              onChanged: (value) {
+                _productDebouncer.run(() {
+                  _performProductSearch(value);
+                });
+              },
             ),
           ],
         ),
@@ -798,59 +884,53 @@ class _SalesPageState extends ConsumerState<SalesPage> {
       );
     }
 
-    return FutureBuilder<List<Product>>(
-      future: _searchProducts(query),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    if (_isSearchingProducts) {
+      return const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)));
+    }
 
-        if (snapshot.hasError) {
-          return Center(child: Text('حدث خطأ: ${snapshot.error}'));
-        }
+    if (_cachedProducts.isEmpty) {
+      return const Center(child: Text('لم يتم العثور على المنتج'));
+    }
 
-        final products = snapshot.data ?? [];
+    return ListView.separated(
+      padding: const EdgeInsets.all(6),
+      itemCount: _cachedProducts.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 4),
+      itemBuilder: (context, index) {
+        final product = _cachedProducts[index];
 
-        if (products.isEmpty) {
-          return const Center(child: Text('لم يتم العثور على المنتج'));
-        }
-
-        return ListView.separated(
-          padding: const EdgeInsets.all(6),
-          itemCount: products.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 4),
-          itemBuilder: (context, index) {
-            final product = products[index];
-
-            return Card(
-              margin: EdgeInsets.zero,
-              child: ListTile(
-                dense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                leading: CircleAvatar(
-                  radius: 14,
-                  child: Text(product.name.isNotEmpty ? product.name[0] : '?', style: const TextStyle(fontSize: 11)),
+        return Card(
+          margin: EdgeInsets.zero,
+          child: ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+            leading: CircleAvatar(
+              radius: 14,
+              child: Text(product.name.isNotEmpty ? product.name[0] : '?', style: const TextStyle(fontSize: 11)),
+            ),
+            title: Text(product.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            subtitle: Text(
+              'الباركود: ${product.barcode} • المخزون: ${product.stockQuantity}',
+              style: const TextStyle(fontSize: 10),
+            ),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  _money(_fromYer(product.sellingPrice)),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
                 ),
-                title: Text(product.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                subtitle: Text(
-                  'الباركود: ${product.barcode} • المخزون: ${product.stockQuantity}',
-                  style: const TextStyle(fontSize: 10),
-                ),
-                trailing: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      _money(_fromYer(product.sellingPrice)),
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                    ),
-                    const Icon(Icons.add_shopping_cart, size: 14, color: Colors.indigo),
-                  ],
-                ),
-                onTap: () => _addProduct(product),
-              ),
-            );
-          },
+                const Icon(Icons.add_shopping_cart, size: 14, color: Colors.indigo),
+              ],
+            ),
+            onTap: () {
+              _addProduct(product);
+              _searchController.clear();
+              setState(() => _cachedProducts.clear());
+              _searchFocusNode.requestFocus();
+            },
+          ),
         );
       },
     );
@@ -883,7 +963,14 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                 : null,
             border: const OutlineInputBorder(),
           ),
-          onChanged: (_) => setState(() {}),
+          onChanged: (value) {
+            if (_selectedCustomer != null) {
+              setState(() => _selectedCustomer = null);
+            }
+            _customerDebouncer.run(() {
+              _performCustomerSearch(value);
+            });
+          },
         ),
 
         if (_selectedCustomer != null)
@@ -913,54 +1000,45 @@ class _SalesPageState extends ConsumerState<SalesPage> {
 
         if (query.isNotEmpty && _selectedCustomer == null) const SizedBox(height: 4),
 
-        if (query.isNotEmpty && _selectedCustomer == null)
-          FutureBuilder<List<Customer>>(
-            future: _searchCustomers(query),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Padding(
-                  padding: EdgeInsets.all(6),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
+        if (query.isNotEmpty && _selectedCustomer == null) ...[
+          if (_isSearchingCustomers)
+            const Padding(
+              padding: EdgeInsets.all(6),
+              child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+            )
+          else if (_cachedCustomers.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(6),
+              child: Text('لم يتم العثور على العميل', style: TextStyle(fontSize: 11)),
+            )
+          else
+            Card(
+              margin: EdgeInsets.zero,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 140),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: _cachedCustomers.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final customer = _cachedCustomers[index];
 
-              final customers = snapshot.data ?? [];
-
-              if (customers.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.all(6),
-                  child: Text('لم يتم العثور على العميل', style: TextStyle(fontSize: 11)),
-                );
-              }
-
-              return Card(
-                margin: EdgeInsets.zero,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 140),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: customers.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final customer = customers[index];
-
-                      return ListTile(
-                        dense: true,
-                        leading: Icon(
-                          customer.isActive ? Icons.person : Icons.person_off,
-                          color: customer.isActive ? Colors.green : Colors.red,
-                          size: 16,
-                        ),
-                        title: Text(customer.name, style: const TextStyle(fontSize: 11)),
-                        subtitle: Text(customer.phone ?? 'بدون هاتف', style: const TextStyle(fontSize: 9)),
-                        onTap: () => _selectCustomer(customer),
-                      );
-                    },
-                  ),
+                    return ListTile(
+                      dense: true,
+                      leading: Icon(
+                        customer.isActive ? Icons.person : Icons.person_off,
+                        color: customer.isActive ? Colors.green : Colors.red,
+                        size: 16,
+                      ),
+                      title: Text(customer.name, style: const TextStyle(fontSize: 11)),
+                      subtitle: Text(customer.phone ?? 'بدون هاتف', style: const TextStyle(fontSize: 9)),
+                      onTap: () => _selectCustomer(customer),
+                    );
+                  },
                 ),
-              );
-            },
-          ),
+              ),
+            ),
+        ],
       ],
     );
   }
@@ -1170,6 +1248,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                   if (value == 'cash') {
                     _selectedCustomer = null;
                     _customerSearchController.clear();
+                    _cachedCustomers.clear();
                     _paidController.text = _fromYer(total).toStringAsFixed(2);
                   }
                 });
@@ -1228,7 +1307,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                     child: OutlinedButton.icon(
                       onPressed: _saving ? null : _holdCurrentInvoice,
                       icon: const Icon(Icons.pause, size: 14),
-                      label: Text('تعليق (F10)', style: const TextStyle(fontSize: 10)),
+                      label: const Text('تعليق (F10)', style: TextStyle(fontSize: 10)),
                     ),
                   ),
                 ),
@@ -1243,7 +1322,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                         label: Text('${_heldInvoices.length}'),
                         child: const Icon(Icons.unarchive, size: 14),
                       ),
-                      label: Text('المعلقة (F11)', style: const TextStyle(fontSize: 10)),
+                      label: const Text('المعلقة (F11)', style: TextStyle(fontSize: 10)),
                     ),
                   ),
                 ),
@@ -1496,6 +1575,31 @@ class _SalesPageState extends ConsumerState<SalesPage> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildShortcutsBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          Text('F1: دفع', style: TextStyle(fontSize: 10)),
+          Text('F2: آجل', style: TextStyle(fontSize: 10)),
+          Text('F3: عميل', style: TextStyle(fontSize: 10)),
+          Text('F4: جديد', style: TextStyle(fontSize: 10)),
+          Text('F5: حفظ', style: TextStyle(fontSize: 10)),
+          Text('F6: باركود', style: TextStyle(fontSize: 10)),
+          Text('F7: بحث', style: TextStyle(fontSize: 10)),
+          Text('F10: تعليق', style: TextStyle(fontSize: 10)),
+          Text('F11: معلقة', style: TextStyle(fontSize: 10)),
+          Text('F12: مساعدة', style: TextStyle(fontSize: 10)),
+        ],
+      ),
     );
   }
 
