@@ -1544,31 +1544,39 @@ class _SalesPageState extends ConsumerState<SalesPage> {
           ),
         ),
         const SizedBox(height: 4),
-        SizedBox(
-          height: 46,
-          child: Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('إجمالي الفاتورة', style: TextStyle(fontSize: 9)),
-                        Text(_money(total), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                      ],
+        Card(
+          margin: EdgeInsets.zero,
+          elevation: 1,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('الإجمالي المستحق:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    Text(
+                      _money(total),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
-                  ),
-                  FilledButton.icon(
+                  ],
+                ),
+                const SizedBox(height: 6),
+                SizedBox(
+                  width: double.infinity,
+                  height: 38,
+                  child: FilledButton.icon(
                     onPressed: _cart.isEmpty || _saving ? null : _openPaymentDialog,
                     icon: const Icon(Icons.payments_outlined, size: 16),
-                    label: const Text('الدفع والإنهاء (F1)', style: TextStyle(fontSize: 11)),
+                    label: const Text('الدفع والإنهاء (F1)', style: TextStyle(fontSize: 12)),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
