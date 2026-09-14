@@ -66,6 +66,10 @@ class _CustomersPageState extends ConsumerState<CustomersPage> {
     final phone = TextEditingController(text: customer?.phone ?? '');
     final address = TextEditingController(text: customer?.address ?? '');
     final notes = TextEditingController(text: customer?.notes ?? '');
+    
+    // حقل الدين الافتتاحي (يظهر فقط عند إضافة عميل جديد)
+    final initialDebt = TextEditingController(text: '0');
+
     final creditLimit = TextEditingController(
       text: customer == null
           ? '0'
@@ -76,7 +80,7 @@ class _CustomersPageState extends ConsumerState<CustomersPage> {
       final saved = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text(customer == null ? 'إضافة عميل' : 'تعديل العميل'),
+          title: Text(customer == null ? 'إضافة عميل جديد' : 'تعديل العميل'),
           content: SizedBox(
             width: 480,
             child: Form(
@@ -102,6 +106,30 @@ class _CustomersPageState extends ConsumerState<CustomersPage> {
                       controller: address,
                       decoration: const InputDecoration(labelText: 'العنوان'),
                     ),
+
+                    // إظهار حقل الدين الافتتاحي فقط عند إضافة عميل جديد
+                    if (customer == null) ...[
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: initialDebt,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: 'الدين الافتتاحي (${_currency.symbol()})',
+                          helperText: 'اكتب المبلغ إن وجد دين سابق على العميل',
+                        ),
+                        validator: (value) {
+                          final debt = double.tryParse(value?.trim() ?? '');
+                          if (debt == null || debt < 0) {
+                            return 'المبلغ يجب أن يكون صفرًا أو أكبر';
+                          }
+                          return null;
+                        },
+                      ),
+                    ],
+
+                    const SizedBox(height: 12),
                     TextFormField(
                       controller: creditLimit,
                       keyboardType: const TextInputType.numberWithOptions(
@@ -149,6 +177,7 @@ class _CustomersPageState extends ConsumerState<CustomersPage> {
       if (saved != true) return;
 
       final limit = _currency.toYer(double.parse(creditLimit.text.trim()), currency: _currency.displayCurrency);
+
       final companion = CustomersCompanion(
         id: customer == null
             ? const drift.Value.absent()
@@ -171,11 +200,28 @@ class _CustomersPageState extends ConsumerState<CustomersPage> {
         updatedAt: drift.Value(DateTime.now()),
       );
 
-      if (customer == null) {
-        await ref.read(customersDaoProvider).insertCustomer(companion);
-      } else {
-        await ref.read(customersDaoProvider).updateCustomer(companion);
-      }
+      // استخدام Database Transaction لضمان حفظ العميل ودينه الافتتاحي معاً بشكل آمن
+      await ref.read(databaseProvider).transaction(() async {
+        if (customer == null) {
+          final customerId = await ref.read(customersDaoProvider).insertCustomer(companion);
+
+          final debtVal = double.tryParse(initialDebt.text.trim()) ?? 0;
+          if (debtVal > 0) {
+            final debtInYer = _currency.toYer(debtVal, currency: _currency.displayCurrency);
+            
+            await ref.read(customerTransactionsDaoProvider).insertTransaction(
+                  CustomerTransactionsCompanion.insert(
+                    customerId: customerId,
+                    type: 'credit_sale',
+                    amount: drift.Value(debtInYer),
+                    notes: const drift.Value('دين افتتاحي سابق'),
+                  ),
+                );
+          }
+        } else {
+          await ref.read(customersDaoProvider).updateCustomer(companion);
+        }
+      });
 
       if (mounted) setState(_load);
     } finally {
@@ -183,6 +229,7 @@ class _CustomersPageState extends ConsumerState<CustomersPage> {
       phone.dispose();
       address.dispose();
       notes.dispose();
+      initialDebt.dispose();
       creditLimit.dispose();
     }
   }
@@ -304,7 +351,7 @@ class _CustomersPageState extends ConsumerState<CustomersPage> {
   }
 
   String _typeLabel(String type) => switch (type) {
-        'credit_sale' => 'بيع آجل',
+        'credit_sale' => 'بيع آجل / دين',
         'payment' => 'سداد',
         'sale_return' => 'مرتجع بيع',
         _ => type,
