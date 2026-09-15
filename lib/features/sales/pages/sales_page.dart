@@ -264,7 +264,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
     }
   }
 
-  // تنفيذ بحث العملاء بسرعة فائقة
+  // تنفيذ بحث العملاء بسرعة فائقة (بالاسم أو رقم الهاتف)
   Future<void> _performCustomerSearch(String query) async {
     if (query.trim().isEmpty) {
       if (mounted) {
@@ -764,14 +764,18 @@ class _SalesPageState extends ConsumerState<SalesPage> {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (dialogContext) {
-        return SafeArea(
-          child: FractionallySizedBox(
-            heightFactor: 0.85,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(10, 2, 10, 12),
-              child: _buildSummary(),
-            ),
-          ),
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return SafeArea(
+              child: FractionallySizedBox(
+                heightFactor: 0.85,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(10, 2, 10, 12),
+                  child: _buildSummary(setStateFn: setModalState),
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -934,12 +938,19 @@ class _SalesPageState extends ConsumerState<SalesPage> {
     );
   }
 
-  Widget _buildCustomerSelector() {
+  Widget _buildCustomerSelector({StateSetter? setStateFn}) {
     if (_paymentMethod != 'credit') {
       return const SizedBox.shrink();
     }
 
     final query = _customerSearchController.text.trim();
+
+    void updateState(VoidCallback fn) {
+      if (setStateFn != null) {
+        setStateFn(fn);
+      }
+      setState(fn);
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -948,14 +959,18 @@ class _SalesPageState extends ConsumerState<SalesPage> {
           controller: _customerSearchController,
           focusNode: _customerFocusNode,
           decoration: InputDecoration(
-            labelText: 'العميل (F3)',
+            labelText: 'اختر العميل (اسم أو رقم الهاتف)',
             hintText: 'ابحث باسم العميل أو رقم الهاتف',
             isDense: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             prefixIcon: const Icon(Icons.person_search, size: 18),
             suffixIcon: _selectedCustomer != null
                 ? IconButton(
-                    onPressed: _clearCustomer,
+                    onPressed: () {
+                      updateState(() {
+                        _clearCustomer();
+                      });
+                    },
                     icon: const Icon(Icons.clear, size: 16),
                   )
                 : null,
@@ -963,10 +978,11 @@ class _SalesPageState extends ConsumerState<SalesPage> {
           ),
           onChanged: (value) {
             if (_selectedCustomer != null) {
-              setState(() => _selectedCustomer = null);
+              updateState(() => _selectedCustomer = null);
             }
             _customerDebouncer.run(() {
               _performCustomerSearch(value);
+              updateState(() {});
             });
           },
         ),
@@ -987,7 +1003,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      'العميل: ${_selectedCustomer!.name}',
+                      'العميل: ${_selectedCustomer!.name} (${_selectedCustomer!.phone ?? "بدون هاتف"})',
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
                     ),
                   ),
@@ -1030,7 +1046,11 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                       ),
                       title: Text(customer.name, style: const TextStyle(fontSize: 11)),
                       subtitle: Text(customer.phone ?? 'بدون هاتف', style: const TextStyle(fontSize: 9)),
-                      onTap: () => _selectCustomer(customer),
+                      onTap: () {
+                        updateState(() {
+                          _selectCustomer(customer);
+                        });
+                      },
                     );
                   },
                 ),
@@ -1137,7 +1157,14 @@ class _SalesPageState extends ConsumerState<SalesPage> {
     );
   }
 
-  Widget _buildSummary() {
+  Widget _buildSummary({StateSetter? setStateFn}) {
+    void updateState(VoidCallback fn) {
+      if (setStateFn != null) {
+        setStateFn(fn);
+      }
+      setState(fn);
+    }
+
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
@@ -1212,7 +1239,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
               onChanged: _currencyReady ? (value) {
                 if (value == null || value == _currencyCode) return;
                 final old = _currencyCode;
-                setState(() {
+                updateState(() {
                   _currencyCode = value;
                   _discountController.text = _currency.convert(
                     discount, from: old, to: value,
@@ -1241,7 +1268,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
               ],
               onChanged: (value) {
                 if (value == null) return;
-                setState(() {
+                updateState(() {
                   _paymentMethod = value;
                   if (value == 'cash') {
                     _selectedCustomer = null;
@@ -1255,7 +1282,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
 
             if (_paymentMethod == 'credit') ...[
               const SizedBox(height: 6),
-              _buildCustomerSelector(),
+              _buildCustomerSelector(setStateFn: setStateFn),
             ],
 
             const SizedBox(height: 6),
