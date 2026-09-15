@@ -1,4 +1,4 @@
-import 'dart0:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -45,7 +45,6 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
       ),
     );
 
-    // تحديث المزود وإعادة البناء عند الحفظ بنجاح
     if (result == true && mounted) {
       ref.invalidate(productsRepositoryProvider);
       setState(() {});
@@ -147,7 +146,10 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
         actions: [
           IconButton(
             tooltip: 'تحديث',
-            onPressed: () => setState(() {}),
+            onPressed: () {
+              ref.invalidate(productsRepositoryProvider);
+              setState(() {});
+            },
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -229,9 +231,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     );
   }
 
-  // تم تحسين الجدول باستخدام ListView.builder لتفادي التوقف وعرض جميع المنتجات
   Widget _buildProductsTable(List<Product> products) {
-    const double tableWidth = 900; // عرض أفق الكلي للجدول
+    const double tableWidth = 900;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -242,7 +243,6 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
           width: tableWidth,
           child: Column(
             children: [
-              // الهيدر (العناوين)
               Container(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 height: 46,
@@ -263,7 +263,6 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                 ),
               ),
               const Divider(height: 1),
-              // الصفوف بتقنية ListView.builder
               Expanded(
                 child: ListView.separated(
                   itemCount: products.length,
@@ -402,7 +401,10 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
           Text('$error', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12)),
           const SizedBox(height: 14),
           FilledButton.icon(
-            onPressed: () => setState(() {}),
+            onPressed: () {
+              ref.invalidate(productsRepositoryProvider);
+              setState(() {});
+            },
             icon: const Icon(Icons.refresh, size: 18),
             label: const Text('إعادة المحاولة'),
           ),
@@ -445,7 +447,7 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withAlpha(30),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -468,7 +470,7 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withAlpha(30),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
