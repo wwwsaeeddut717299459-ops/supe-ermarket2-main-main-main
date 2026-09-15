@@ -1,5 +1,4 @@
-import 'dart:async';
-
+import 'dart0:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -46,7 +45,9 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
       ),
     );
 
+    // تحديث المزود وإعادة البناء عند الحفظ بنجاح
     if (result == true && mounted) {
+      ref.invalidate(productsRepositoryProvider);
       setState(() {});
     }
   }
@@ -59,6 +60,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     );
 
     if (result == true && mounted) {
+      ref.invalidate(productsRepositoryProvider);
       setState(() {});
     }
   }
@@ -94,6 +96,9 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
       await repository.delete(product.id);
 
       if (!mounted) return;
+
+      ref.invalidate(productsRepositoryProvider);
+      setState(() {});
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم حذف المنتج بنجاح')),
@@ -224,137 +229,130 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     );
   }
 
+  // تم تحسين الجدول باستخدام ListView.builder لتفادي التوقف وعرض جميع المنتجات
   Widget _buildProductsTable(List<Product> products) {
+    const double tableWidth = 900; // عرض أفق الكلي للجدول
+
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            scrollDirection: Axis.vertical,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                child: DataTable(
-                  columnSpacing: 16,
-                  headingRowHeight: 46,
-                  dataRowMinHeight: 48,
-                  dataRowMaxHeight: 56,
-                  headingTextStyle: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                  columns: const [
-                    DataColumn(label: Text('الرقم')),
-                    DataColumn(label: Text('الباركود')),
-                    DataColumn(label: Text('المنتج')),
-                    DataColumn(label: Text('سعر الشراء')),
-                    DataColumn(label: Text('سعر البيع')),
-                    DataColumn(label: Text('المخزون')),
-                    DataColumn(label: Text('الصلاحية')),
-                    DataColumn(label: Text('الوحدة')),
-                    DataColumn(label: Text('الحالة')),
-                    DataColumn(label: Text('الإجراءات')),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: tableWidth,
+          child: Column(
+            children: [
+              // الهيدر (العناوين)
+              Container(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                height: 46,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: const Row(
+                  children: [
+                    SizedBox(width: 50, child: Text('الرقم', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                    SizedBox(width: 100, child: Text('الباركود', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                    SizedBox(width: 150, child: Text('المنتج', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                    SizedBox(width: 80, child: Text('سعر الشراء', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                    SizedBox(width: 80, child: Text('سعر البيع', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                    SizedBox(width: 80, child: Text('المخزون', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                    SizedBox(width: 100, child: Text('الصلاحية', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                    SizedBox(width: 70, child: Text('الوحدة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                    SizedBox(width: 80, child: Text('الحالة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                    SizedBox(width: 90, child: Text('الإجراءات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
                   ],
-                  rows: products.map((product) {
+                ),
+              ),
+              const Divider(height: 1),
+              // الصفوف بتقنية ListView.builder
+              Expanded(
+                child: ListView.separated(
+                  itemCount: products.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final product = products[index];
                     final isLowStock = product.stockQuantity <= product.minimumStock;
                     final expired = _isExpired(product.expiryDate);
                     final expiringSoon = _isExpiringSoon(product.expiryDate);
 
-                    // دالة مساعدة لتغليف محتوى الخلية بنقرة مزدوجة تفتح نموذج التعديل
-                    Widget wrapCell(Widget child) {
-                      return GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onDoubleTap: () => _openEditProduct(product),
-                        child: SizedBox.expand(
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: child,
-                          ),
-                        ),
-                      );
-                    }
-
-                    return DataRow(
-                      cells: [
-                        DataCell(wrapCell(Text(product.id.toString(), style: const TextStyle(fontSize: 12)))),
-                        DataCell(wrapCell(Text(product.barcode, style: const TextStyle(fontSize: 12)))),
-                        DataCell(
-                          wrapCell(
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 160),
+                    return InkWell(
+                      onDoubleTap: () => _openEditProduct(product),
+                      child: Container(
+                        height: 52,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: [
+                            SizedBox(width: 50, child: Text(product.id.toString(), style: const TextStyle(fontSize: 12))),
+                            SizedBox(width: 100, child: Text(product.barcode, style: const TextStyle(fontSize: 12))),
+                            SizedBox(
+                              width: 150,
                               child: Text(
                                 product.name,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
                               ),
                             ),
-                          ),
-                        ),
-                        DataCell(wrapCell(Text(_formatNumber(product.purchasePrice), style: const TextStyle(fontSize: 12)))),
-                        DataCell(wrapCell(Text(_formatNumber(product.sellingPrice), style: const TextStyle(fontSize: 12)))),
-                        DataCell(
-                          wrapCell(
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(_formatNumber(product.stockQuantity), style: const TextStyle(fontSize: 12)),
-                                if (isLowStock)
-                                  const Padding(
-                                    padding: EdgeInsets.only(right: 4),
-                                    child: Tooltip(
-                                      message: 'المخزون منخفض',
-                                      child: Icon(Icons.warning_amber, size: 16, color: Colors.orange),
+                            SizedBox(width: 80, child: Text(_formatNumber(product.purchasePrice), style: const TextStyle(fontSize: 12))),
+                            SizedBox(width: 80, child: Text(_formatNumber(product.sellingPrice), style: const TextStyle(fontSize: 12))),
+                            SizedBox(
+                              width: 80,
+                              child: Row(
+                                children: [
+                                  Text(_formatNumber(product.stockQuantity), style: const TextStyle(fontSize: 12)),
+                                  if (isLowStock)
+                                    const Padding(
+                                      padding: EdgeInsets.only(right: 4),
+                                      child: Tooltip(
+                                        message: 'المخزون منخفض',
+                                        child: Icon(Icons.warning_amber, size: 16, color: Colors.orange),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            SizedBox(
+                              width: 100,
+                              child: _ExpiryBadge(
+                                date: product.expiryDate,
+                                expired: expired,
+                                expiringSoon: expiringSoon,
+                                formattedDate: _formatDate(product.expiryDate),
+                              ),
+                            ),
+                            SizedBox(width: 70, child: Text(product.unit, style: const TextStyle(fontSize: 12))),
+                            SizedBox(width: 80, child: _StatusBadge(active: product.isActive)),
+                            SizedBox(
+                              width: 90,
+                              child: Row(
+                                children: [
+                                  IconButton(
+                                    visualDensity: VisualDensity.compact,
+                                    tooltip: 'تعديل',
+                                    onPressed: () => _openEditProduct(product),
+                                    icon: const Icon(Icons.edit_outlined, size: 18),
+                                  ),
+                                  IconButton(
+                                    visualDensity: VisualDensity.compact,
+                                    tooltip: 'حذف',
+                                    onPressed: () => _deleteProduct(product),
+                                    icon: Icon(
+                                      Icons.delete_outline,
+                                      size: 18,
+                                      color: Theme.of(context).colorScheme.error,
                                     ),
                                   ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        DataCell(
-                          wrapCell(
-                            _ExpiryBadge(
-                              date: product.expiryDate,
-                              expired: expired,
-                              expiringSoon: expiringSoon,
-                              formattedDate: _formatDate(product.expiryDate),
-                            ),
-                          ),
-                        ),
-                        DataCell(wrapCell(Text(product.unit, style: const TextStyle(fontSize: 12)))),
-                        DataCell(wrapCell(_StatusBadge(active: product.isActive))),
-                        DataCell(
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                visualDensity: VisualDensity.compact,
-                                tooltip: 'تعديل',
-                                onPressed: () => _openEditProduct(product),
-                                icon: const Icon(Icons.edit_outlined, size: 18),
+                                ],
                               ),
-                              IconButton(
-                                visualDensity: VisualDensity.compact,
-                                tooltip: 'حذف',
-                                onPressed: () => _deleteProduct(product),
-                                icon: Icon(
-                                  Icons.delete_outline,
-                                  size: 18,
-                                  color: Theme.of(context).colorScheme.error,
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     );
-                  }).toList(),
+                  },
                 ),
               ),
-            ),
-          );
-        },
+            ],
+          ),
+        ),
       ),
     );
   }
