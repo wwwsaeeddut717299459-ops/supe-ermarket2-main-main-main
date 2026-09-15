@@ -939,10 +939,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
   }
 
   Widget _buildCustomerSelector({StateSetter? setStateFn}) {
-    if (_paymentMethod != 'credit') {
-      return const SizedBox.shrink();
-    }
-
+    final theme = Theme.of(context);
     final query = _customerSearchController.text.trim();
 
     void updateState(VoidCallback fn) {
@@ -952,112 +949,206 @@ class _SalesPageState extends ConsumerState<SalesPage> {
       setState(fn);
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          controller: _customerSearchController,
-          focusNode: _customerFocusNode,
-          decoration: InputDecoration(
-            labelText: 'اختر العميل (اسم أو رقم الهاتف)',
-            hintText: 'ابحث باسم العميل أو رقم الهاتف',
-            isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            prefixIcon: const Icon(Icons.person_search, size: 18),
-            suffixIcon: _selectedCustomer != null
-                ? IconButton(
-                    onPressed: () {
-                      updateState(() {
-                        _clearCustomer();
-                      });
-                    },
-                    icon: const Icon(Icons.clear, size: 16),
-                  )
-                : null,
-            border: const OutlineInputBorder(),
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        return SizeTransition(
+          sizeFactor: animation,
+          axisAlignment: -1.0,
+          child: FadeTransition(opacity: animation, child: child),
+        );
+      },
+      child: Container(
+        key: ValueKey(_paymentMethod == 'credit'),
+        margin: const EdgeInsets.only(top: 4, bottom: 4),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: _selectedCustomer != null 
+                ? Colors.green.shade400 
+                : theme.colorScheme.outlineVariant,
+            width: 1.2,
           ),
-          onChanged: (value) {
-            if (_selectedCustomer != null) {
-              updateState(() => _selectedCustomer = null);
-            }
-            _customerDebouncer.run(() {
-              _performCustomerSearch(value);
-              updateState(() {});
-            });
-          },
         ),
-
-        if (_selectedCustomer != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.green),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.green, size: 16),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      'العميل: ${_selectedCustomer!.name} (${_selectedCustomer!.phone ?? "بدون هاتف"})',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                    ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.person_pin_rounded, 
+                  size: 16, 
+                  color: _selectedCustomer != null ? Colors.green : theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  _selectedCustomer == null ? 'عميل الفاتورة الآجلة (F3)' : 'العميل المحدد',
+                  style: TextStyle(
+                    fontSize: 11, 
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
+            const SizedBox(height: 6),
 
-        if (query.isNotEmpty && _selectedCustomer == null) const SizedBox(height: 4),
-
-        if (query.isNotEmpty && _selectedCustomer == null) ...[
-          if (_isSearchingCustomers)
-            const Padding(
-              padding: EdgeInsets.all(6),
-              child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
-            )
-          else if (_cachedCustomers.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(6),
-              child: Text('لم يتم العثور على العميل', style: TextStyle(fontSize: 11)),
-            )
-          else
-            Card(
-              margin: EdgeInsets.zero,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 140),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: _cachedCustomers.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final customer = _cachedCustomers[index];
-
-                    return ListTile(
-                      dense: true,
-                      leading: Icon(
-                        customer.isActive ? Icons.person : Icons.person_off,
-                        color: customer.isActive ? Colors.green : Colors.red,
-                        size: 16,
-                      ),
-                      title: Text(customer.name, style: const TextStyle(fontSize: 11)),
-                      subtitle: Text(customer.phone ?? 'بدون هاتف', style: const TextStyle(fontSize: 9)),
-                      onTap: () {
-                        updateState(() {
-                          _selectCustomer(customer);
-                        });
-                      },
-                    );
-                  },
+            // حقل البحث
+            TextField(
+              controller: _customerSearchController,
+              focusNode: _customerFocusNode,
+              style: const TextStyle(fontSize: 12),
+              decoration: InputDecoration(
+                hintText: 'ابحث باسم العميل أو رقم الهاتف...',
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                prefixIcon: const Icon(Icons.search, size: 16),
+                suffixIcon: query.isNotEmpty || _selectedCustomer != null
+                    ? IconButton(
+                        tooltip: 'مسح التحديد',
+                        onPressed: () {
+                          updateState(() {
+                            _clearCustomer();
+                          });
+                        },
+                        icon: const Icon(Icons.clear, size: 16),
+                      )
+                    : null,
+                filled: true,
+                fillColor: theme.colorScheme.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: BorderSide(color: theme.colorScheme.outline),
                 ),
               ),
+              onChanged: (value) {
+                if (_selectedCustomer != null) {
+                  updateState(() => _selectedCustomer = null);
+                }
+                _customerDebouncer.run(() {
+                  _performCustomerSearch(value);
+                  updateState(() {});
+                });
+              },
             ),
-        ],
-      ],
+
+            // العميل المكتمل التحديد
+            if (_selectedCustomer != null) ...[
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.green.shade300),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle_rounded, color: Colors.green, size: 16),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _selectedCustomer!.name,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.green),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (_selectedCustomer!.phone != null && _selectedCustomer!.phone!.isNotEmpty)
+                            Text(
+                              'هاتف: ${_selectedCustomer!.phone}',
+                              style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            // قائمة نتائج البحث الفورية
+            if (query.isNotEmpty && _selectedCustomer == null) ...[
+              const SizedBox(height: 6),
+              if (_isSearchingCustomers)
+                const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                )
+              else if (_cachedCustomers.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.errorContainer.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 14, color: theme.colorScheme.error),
+                      const SizedBox(width: 6),
+                      Text(
+                        'لم يتم العثور على عميل طابق البحث',
+                        style: TextStyle(fontSize: 10, color: theme.colorScheme.error),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Material(
+                  elevation: 2,
+                  borderRadius: BorderRadius.circular(6),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 150),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      itemCount: _cachedCustomers.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final customer = _cachedCustomers[index];
+                        return ListTile(
+                          dense: true,
+                          visualDensity: VisualDensity.compact,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                          leading: Icon(
+                            customer.isActive ? Icons.account_circle : Icons.person_off_rounded,
+                            color: customer.isActive ? theme.colorScheme.primary : theme.colorScheme.error,
+                            size: 18,
+                          ),
+                          title: Text(
+                            customer.name,
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            customer.phone ?? 'بدون رقم هاتف',
+                            style: TextStyle(fontSize: 9, color: theme.colorScheme.onSurfaceVariant),
+                          ),
+                          onTap: () {
+                            updateState(() {
+                              _selectCustomer(customer);
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -1205,24 +1296,6 @@ class _SalesPageState extends ConsumerState<SalesPage> {
 
             const SizedBox(height: 6),
 
-            if (_paymentMethod == 'credit') ...[
-              TextField(
-                controller: _paidController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                ],
-                decoration: InputDecoration(
-                  labelText: 'المبلغ المدفوع ($_currencySymbol)',
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  prefixIcon: const Icon(Icons.payments, size: 16),
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 6),
-            ],
-
             DropdownButtonFormField<String>(
               value: _currencyCode,
               decoration: const InputDecoration(
@@ -1275,14 +1348,33 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                     _customerSearchController.clear();
                     _cachedCustomers.clear();
                     _paidController.text = _fromYer(total).toStringAsFixed(2);
+                  } else if (value == 'credit') {
+                    _paidController.text = '0';
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) _customerFocusNode.requestFocus();
+                    });
                   }
                 });
               },
             ),
 
             if (_paymentMethod == 'credit') ...[
-              const SizedBox(height: 6),
               _buildCustomerSelector(setStateFn: setStateFn),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _paidController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'المبلغ المدفوع مقدمًا ($_currencySymbol)',
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  prefixIcon: const Icon(Icons.payments, size: 16),
+                  border: const OutlineInputBorder(),
+                ),
+              ),
             ],
 
             const SizedBox(height: 6),
@@ -1667,6 +1759,9 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                 setState(() {
                   _paymentMethod = 'credit';
                   _paidController.text = '0';
+                });
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) _customerFocusNode.requestFocus();
                 });
                 return null;
               },
