@@ -262,48 +262,68 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                     final expired = _isExpired(product.expiryDate);
                     final expiringSoon = _isExpiringSoon(product.expiryDate);
 
+                    // دالة مساعدة لتغليف محتوى الخلية بنقرة مزدوجة تفتح نموذج التعديل
+                    Widget wrapCell(Widget child) {
+                      return GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onDoubleTap: () => _openEditProduct(product),
+                        child: SizedBox.expand(
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: child,
+                          ),
+                        ),
+                      );
+                    }
+
                     return DataRow(
                       cells: [
-                        DataCell(Text(product.id.toString(), style: const TextStyle(fontSize: 12))),
-                        DataCell(Text(product.barcode, style: const TextStyle(fontSize: 12))),
+                        DataCell(wrapCell(Text(product.id.toString(), style: const TextStyle(fontSize: 12)))),
+                        DataCell(wrapCell(Text(product.barcode, style: const TextStyle(fontSize: 12)))),
                         DataCell(
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 160),
-                            child: Text(
-                              product.name,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                          wrapCell(
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 160),
+                              child: Text(
+                                product.name,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                              ),
                             ),
                           ),
                         ),
-                        DataCell(Text(_formatNumber(product.purchasePrice), style: const TextStyle(fontSize: 12))),
-                        DataCell(Text(_formatNumber(product.sellingPrice), style: const TextStyle(fontSize: 12))),
+                        DataCell(wrapCell(Text(_formatNumber(product.purchasePrice), style: const TextStyle(fontSize: 12)))),
+                        DataCell(wrapCell(Text(_formatNumber(product.sellingPrice), style: const TextStyle(fontSize: 12)))),
                         DataCell(
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(_formatNumber(product.stockQuantity), style: const TextStyle(fontSize: 12)),
-                              if (isLowStock)
-                                const Padding(
-                                  padding: EdgeInsets.only(right: 4),
-                                  child: Tooltip(
-                                    message: 'المخزون منخفض',
-                                    child: Icon(Icons.warning_amber, size: 16, color: Colors.orange),
+                          wrapCell(
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(_formatNumber(product.stockQuantity), style: const TextStyle(fontSize: 12)),
+                                if (isLowStock)
+                                  const Padding(
+                                    padding: EdgeInsets.only(right: 4),
+                                    child: Tooltip(
+                                      message: 'المخزون منخفض',
+                                      child: Icon(Icons.warning_amber, size: 16, color: Colors.orange),
+                                    ),
                                   ),
-                                ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                         DataCell(
-                          _ExpiryBadge(
-                            date: product.expiryDate,
-                            expired: expired,
-                            expiringSoon: expiringSoon,
-                            formattedDate: _formatDate(product.expiryDate),
+                          wrapCell(
+                            _ExpiryBadge(
+                              date: product.expiryDate,
+                              expired: expired,
+                              expiringSoon: expiringSoon,
+                              formattedDate: _formatDate(product.expiryDate),
+                            ),
                           ),
                         ),
-                        DataCell(Text(product.unit, style: const TextStyle(fontSize: 12))),
-                        DataCell(_StatusBadge(active: product.isActive)),
+                        DataCell(wrapCell(Text(product.unit, style: const TextStyle(fontSize: 12)))),
+                        DataCell(wrapCell(_StatusBadge(active: product.isActive))),
                         DataCell(
                           Row(
                             mainAxisSize: MainAxisSize.min,
